@@ -1,12 +1,17 @@
 const express = require('express');
+const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
 const { OAuth2Client } = require('google-auth-library');
+const verifyToken = require('./middleware/authMiddleware'); // นำเข้า middleware
+require('dotenv').config(); // นำเข้า dotenv
+
 const app = express();
+// การตั้งค่าให้อนุญาตทุกแหล่งที่มา
+app.use(cors());
 const port = 3001;
-const clientID ="219049469149-88g6l9orerd1ucthahjnj05pf1vjgebv.apps.googleusercontent.com"; 
 // ตั้งค่า Google OAuth2Client
-const client = new OAuth2Client(clientID);
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // ใช้ body-parser เพื่อ parse request body
 app.use(bodyParser.json());
 
@@ -28,37 +33,7 @@ db.run(`
     streak INTEGER DEFAULT 0
   )
 `);
-// Middleware สำหรับตรวจสอบ token
-const verifyToken = async (req, res, next) => {
-    const token = req.headers.authorization && req.headers.authorization.split(' ')[1]; // รับ token จาก header
-  
-    if (!token) {
-      return res.status(401).json({ message: 'Token is required' });
-    }
-  
-    try {
-      // ตรวจสอบ token
-      const ticket = await client.verifyIdToken({
-        idToken: token,
-        audience: clientID,
-      });
-      const payload = ticket.getPayload();
-      
-      // เก็บข้อมูลผู้ใช้ไว้ใน req.user สำหรับใช้ใน action ถัดไป
-      req.user = {
-        id: payload['sub'],
-        email: payload['email'],
-        name: payload['name'],
-        picture: payload['picture']
-      };
-  
-      // ไปยัง middleware หรือ route ถัดไป
-      next();
-    } catch (error) {
-      console.error('Error verifying token:', error);
-      return res.status(401).json({ message: 'Invalid token' });
-    }
-  };
+
 // เพิ่มผู้เล่นใหม่
 app.post('/api/players', verifyToken, (req, res) => {
   const { username } = req.body;
@@ -106,7 +81,6 @@ app.post('/api/players/:id/score', verifyToken, (req, res) => {
   });
 });
 
-// เพิ่ม middleware สำหรับทุก action ที่ต้องการตรวจสอบ token
 // แสดงคะแนนของผู้เล่นทั้งหมด (Leaderboard)
 app.get('/api/leaderboard', verifyToken,(req, res) => {
   const sql = 'SELECT id, username, score FROM players ORDER BY score DESC LIMIT 10';
@@ -144,16 +118,15 @@ app.delete('/api/players/:id', verifyToken, (req, res) => {
   });
 });
 
-
 // Endpoint สำหรับรับ Google token
-app.post('/api/auth/google', verifyToken, async (req, res) => {
+app.post('/api/auth/google', async (req, res) => {
     const { token } = req.body;
   
     try {
       // ตรวจสอบ token ที่ได้รับจาก Google
       const ticket = await client.verifyIdToken({
         idToken: token,
-        audience: 'YOUR_GOOGLE_CLIENT_ID',
+        audience: process.env.GOOGLE_CLIENT_ID,
       });
       const payload = ticket.getPayload();
       const userId = payload['sub']; // รหัสประจำตัวของผู้ใช้ Google
