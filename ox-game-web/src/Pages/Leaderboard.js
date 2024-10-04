@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 
 function Leaderboard() {
   const [players, setPlayers] = useState([]);
-
+  var url = `${process.env.REACT_APP_API_URL}/api/leaderboard`;
   useEffect(() => {
-    fetch('/api/leaderboard')
+    fetch(url)
       .then(res => res.json())
       .then(data => setPlayers(data));
   }, []);

@@ -1,13 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { X, Circle } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import { updateScore } from '../slices/gameSlice'; // นำเข้าฟังก์ชัน action จาก Redux
 
 const TicTacToe = () => {
+
+  const dispatch = useDispatch();
+  const token = useSelector((state) => state.auth.token); // ดึง token จาก Redux store
+
   const [board, setBoard] = useState(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
   const [winner, setWinner] = useState(null);
   const [score, setScore] = useState(0);
   const [winStreak, setWinStreak] = useState(0);
-
+/*
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],
+      [0, 4, 8], [2, 4, 6],
+*/
   const calculateWinner = (squares) => {
     const lines = [
       [0, 1, 2],
@@ -76,6 +86,8 @@ const TicTacToe = () => {
         setScore(score => score - 1);
         setWinStreak(0);
       }
+      // ส่งผลลัพธ์เกมไปอัปเดตคะแนน
+      dispatch(updateScore({ token, score }));
     } else if (!board.includes(null)) {
       setWinner('draw');
     }

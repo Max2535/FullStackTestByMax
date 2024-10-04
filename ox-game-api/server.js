@@ -4,6 +4,7 @@ const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
 const { OAuth2Client } = require('google-auth-library');
 const verifyToken = require('./middleware/authMiddleware'); // นำเข้า middleware
+//const apiRoutes = require('./routes/apiRoutes'); // นำเข้าไฟล์ route
 require('dotenv').config(); // นำเข้า dotenv
 
 const app = express();
@@ -48,37 +49,51 @@ app.post('/api/players', verifyToken, (req, res) => {
 });
 
 // อัปเดตคะแนนของผู้เล่น
-app.post('/api/players/:id/score', verifyToken, (req, res) => {
-  const playerId = req.params.id;
+app.post('/api/players/score', verifyToken, async (req, res) => {
+
+  const { token } = req.body; 
   const { result } = req.body; // result เป็น 'win' หรือ 'lose'
-
-  db.get('SELECT score, streak FROM players WHERE id = ?', [playerId], (err, player) => {
-    if (err || !player) {
-      return res.status(404).json({ error: 'Player not found' });
-    }
-
-    let { score, streak } = player;
-
-    if (result === 'win') {
-      score += 1;
-      streak += 1;
-      if (streak === 3) {
-        score += 1; // ให้คะแนนพิเศษเมื่อชนะ 3 ครั้งติดต่อกัน
-        streak = 0; // รีเซ็ต streak
-      }
-    } else if (result === 'lose') {
-      score -= 1;
-      streak = 0; // รีเซ็ต streak เมื่อแพ้
-    }
-
-    const sql = 'UPDATE players SET score = ?, streak = ? WHERE id = ?';
-    db.run(sql, [score, streak, playerId], function (err) {
-      if (err) {
-        return res.status(400).json({ error: err.message });
-      }
-      res.json({ score, streak });
+  try{   
+    // ตรวจสอบ token ที่ได้รับจาก Google
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
     });
-  });
+
+    const payload = ticket.getPayload();
+    const playerId = payload['sub']; // รหัสประจำตัวของผู้ใช้ Google
+
+    db.get('SELECT score, streak FROM players WHERE id = ?', [playerId], (err, player) => {
+      if (err || !player) {
+        return res.status(404).json({ error: 'Player not found' });
+      }
+  
+      let { score, streak } = player;
+  
+      if (result === 'win') {
+        score += 1;
+        streak += 1;
+        if (streak === 3) {
+          score += 1; // ให้คะแนนพิเศษเมื่อชนะ 3 ครั้งติดต่อกัน
+          streak = 0; // รีเซ็ต streak
+        }
+      } else if (result === 'lose') {
+        score -= 1;
+        streak = 0; // รีเซ็ต streak เมื่อแพ้
+      }
+  
+      const sql = 'UPDATE players SET score = ?, streak = ? WHERE id = ?';
+      db.run(sql, [score, streak, playerId], function (err) {
+        if (err) {
+          return res.status(400).json({ error: err.message });
+        }
+        res.json({ score, streak });
+      });
+    });
+  }catch(error){    
+    console.error('Server error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 // แสดงคะแนนของผู้เล่นทั้งหมด (Leaderboard)
@@ -148,6 +163,8 @@ app.post('/api/auth/google', async (req, res) => {
     }
   });
 
+// ใช้ route ที่ต้องการตรวจสอบการเข้าสู่ระบบ
+//app.use('/api', apiRoutes);
 
 // เริ่มเซิร์ฟเวอร์
 app.listen(port, () => {
