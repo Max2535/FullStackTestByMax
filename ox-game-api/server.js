@@ -1,11 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
-const bodyParser = require('body-parser');
-const { OAuth2Client } = require('google-auth-library');
-const verifyToken = require('./middleware/authMiddleware'); // นำเข้า middleware
+const express = require("express");
+const cors = require("cors");
+const sqlite3 = require("sqlite3").verbose();
+const bodyParser = require("body-parser");
+const { OAuth2Client } = require("google-auth-library");
+const verifyToken = require("./middleware/authMiddleware"); // นำเข้า middleware
 //const apiRoutes = require('./routes/apiRoutes'); // นำเข้าไฟล์ route
-require('dotenv').config(); // นำเข้า dotenv
+require("dotenv").config(); // นำเข้า dotenv
 
 const app = express();
 // การตั้งค่าให้อนุญาตทุกแหล่งที่มา
@@ -17,151 +17,148 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 app.use(bodyParser.json());
 
 // เชื่อมต่อกับฐานข้อมูล SQLite
-const db = new sqlite3.Database('./game_scores.db', (err) => {
+const db = new sqlite3.Database("./game_scores.db", (err) => {
   if (err) {
     console.error(err.message);
   } else {
-    console.log('Connected to the SQLite database.');
+    console.log("Connected to the SQLite database.");
   }
 });
 
 // สร้างตารางสำหรับเก็บข้อมูลผู้เล่นและคะแนน หากยังไม่มีตาราง
 db.run(`
-  CREATE TABLE IF NOT EXISTS players (
+CREATE TABLE IF NOT EXISTS players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user VARCHAR(255) NOT NULL,
     username TEXT NOT NULL,
     score INTEGER DEFAULT 0,
-    streak INTEGER DEFAULT 0
-  )
+    streak INTEGER DEFAULT 0,
+    date DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
-// เพิ่มผู้เล่นใหม่
-app.post('/api/players', verifyToken, (req, res) => {
-  const { username } = req.body;
-
-  const sql = 'INSERT INTO players (username) VALUES (?)';
-  db.run(sql, [username], function (err) {
-    if (err) {
-      return res.status(400).json({ error: err.message });
+function updateScoreAndStreak(result, score, streak) {
+  if (result === 'win') {
+    score += 1;
+    streak += 1;
+    if (streak === 3) {
+      score += 1; // ให้คะแนนพิเศษเมื่อชนะ 3 ครั้งติดต่อกัน
+      streak = 0; // รีเซ็ต streak
     }
-    res.json({ playerId: this.lastID, username });
-  });
-});
+  } else if (result === 'lose') {
+    score -= 1;
+    streak = 0; // รีเซ็ต streak เมื่อแพ้
+  }
+  score<0?score=0:score;
+  return { score, streak };
+}
 
-// อัปเดตคะแนนของผู้เล่น
-app.post('/api/players/score', verifyToken, async (req, res) => {
-
-  const { token } = req.body; 
-  const { result } = req.body; // result เป็น 'win' หรือ 'lose'
-  try{   
+app.post("/api/players", verifyToken, async (req, res) => {
+  const { result, token } = req.body;
+  try {
     // ตรวจสอบ token ที่ได้รับจาก Google
     const ticket = await client.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
-
     const payload = ticket.getPayload();
-    const playerId = payload['sub']; // รหัสประจำตัวของผู้ใช้ Google
+    const playerId = payload["sub"]; // รหัสประจำตัวของผู้ใช้ Google    
+    const name = payload["name"]; // ชื่อของผู้ใช้   
 
-    db.get('SELECT score, streak FROM players WHERE id = ?', [playerId], (err, player) => {
+    db.get("SELECT score, streak FROM players WHERE user = ?", [playerId], (err, player) => {
       if (err || !player) {
-        return res.status(404).json({ error: 'Player not found' });
+        let score = 0;
+        let streak = 0;
+
+        ({ score, streak } = updateScoreAndStreak(result, score, streak));
+
+        const insertSql = "INSERT INTO players (user,username, score, streak, date) VALUES (?,?, ?, ?, ?)";
+        db.run(insertSql, [playerId,name,score,streak,Date.now()], function (err) {
+          if (err) {
+            return res.status(400).json({ error: err.message });
+          }
+          res.json({ playerId: this.lastID, playerId });
+        });
+      }else{
+        let { score, streak } = player;
+  
+        ({ score, streak } = updateScoreAndStreak(result, score, streak));
+  
+        const sql = 'UPDATE players SET score = ?, streak = ? WHERE user = ?';
+        db.run(sql, [score, streak, playerId], function (err) {
+          if (err) {
+            return res.status(400).json({ error: err.message });
+          }
+          res.json({ score, streak });
+        });
       }
-  
-      let { score, streak } = player;
-  
-      if (result === 'win') {
-        score += 1;
-        streak += 1;
-        if (streak === 3) {
-          score += 1; // ให้คะแนนพิเศษเมื่อชนะ 3 ครั้งติดต่อกัน
-          streak = 0; // รีเซ็ต streak
-        }
-      } else if (result === 'lose') {
-        score -= 1;
-        streak = 0; // รีเซ็ต streak เมื่อแพ้
-      }
-  
-      const sql = 'UPDATE players SET score = ?, streak = ? WHERE id = ?';
-      db.run(sql, [score, streak, playerId], function (err) {
-        if (err) {
-          return res.status(400).json({ error: err.message });
-        }
-        res.json({ score, streak });
-      });
     });
-  }catch(error){    
-    console.error('Server error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch (error) {
+    console.error("Error verifying Google token:", error);
+    res.status(401).json({ message: "Invalid token" });
   }
 });
 
+
 // แสดงคะแนนของผู้เล่นทั้งหมด (Leaderboard)
-app.get('/api/leaderboard', verifyToken,(req, res) => {
-  const sql = 'SELECT id, username, score FROM players ORDER BY score DESC LIMIT 10';
-  db.all(sql, [], (err, rows) => {
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
-    res.json({ players: rows });
-  });
+app.get("/api/leaderboard", verifyToken, (req, res) => {
+  const sql =
+  "SELECT user,username, score, streak, date FROM players ORDER BY score DESC LIMIT 10";
+db.all(sql, [], (err, rows) => {
+  if (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  res.json({ players: rows });
 });
+});
+
+
 
 // แสดงคะแนนของผู้เล่นคนเดียว
-app.get('/api/players/:id', verifyToken, (req, res) => {
-  const playerId = req.params.id;
-
-  const sql = 'SELECT id, username, score, streak FROM players WHERE id = ?';
-  db.get(sql, [playerId], (err, player) => {
-    if (err || !player) {
-      return res.status(404).json({ error: 'Player not found' });
-    }
-    res.json(player);
-  });
-});
-
-// ลบผู้เล่น
-app.delete('/api/players/:id', verifyToken, (req, res) => {
-  const playerId = req.params.id;
-
-  const sql = 'DELETE FROM players WHERE id = ?';
-  db.run(sql, [playerId], function (err) {
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
-    res.json({ message: 'Player deleted successfully' });
-  });
+app.get("/api/players/", verifyToken, async (req, res) => {
+  try {
+    
+    db.get("SELECT user, username, score, streak FROM players WHERE user = ?", [req.user.id], (err, player) =>{
+      if (err || !player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      res.json(player);
+    });
+  } catch (error) {
+    console.error("Error verifying Google token:", error);
+    res.status(401).json({ message: "Invalid token" });
+  }
 });
 
 // Endpoint สำหรับรับ Google token
-app.post('/api/auth/google', async (req, res) => {
-    const { token } = req.body;
-  
-    try {
-      // ตรวจสอบ token ที่ได้รับจาก Google
-      const ticket = await client.verifyIdToken({
-        idToken: token,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      const userId = payload['sub']; // รหัสประจำตัวของผู้ใช้ Google
-      const email = payload['email']; // อีเมลของผู้ใช้
-  
-      // ส่งข้อมูลผู้ใช้กลับไป
-      res.json({
-        message: 'User authenticated successfully',
-        user: {
-          id: userId,
-          email: email,
-          name: payload['name'],
-          picture: payload['picture'],
-        },
-      });
-    } catch (error) {
-      console.error('Error verifying Google token:', error);
-      res.status(401).json({ message: 'Invalid token' });
-    }
-  });
+app.post("/api/auth/google", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    // ตรวจสอบ token ที่ได้รับจาก Google
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const userId = payload["sub"]; // รหัสประจำตัวของผู้ใช้ Google
+    const email = payload["email"]; // อีเมลของผู้ใช้
+
+    // ส่งข้อมูลผู้ใช้กลับไป
+    res.json({
+      message: "User authenticated successfully",
+      user: {
+        id: userId,
+        email: email,
+        name: payload["name"],
+        picture: payload["picture"],
+      },
+    });
+  } catch (error) {
+    console.error("Error verifying Google token:", error);
+    res.status(401).json({ message: "Invalid token" });
+  }
+});
 
 // ใช้ route ที่ต้องการตรวจสอบการเข้าสู่ระบบ
 //app.use('/api', apiRoutes);

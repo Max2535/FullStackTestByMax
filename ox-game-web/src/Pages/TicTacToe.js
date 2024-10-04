@@ -1,23 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { X, Circle } from 'lucide-react';
-import { useDispatch, useSelector } from 'react-redux';
-import { updateScore } from '../slices/gameSlice'; // นำเข้าฟังก์ชัน action จาก Redux
+import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
+
 
 const TicTacToe = () => {
+  const navigate = useNavigate();
 
-  const dispatch = useDispatch();
   const token = useSelector((state) => state.auth.token); // ดึง token จาก Redux store
+  const user = useSelector((state) => state.auth.user); // ดึงข้อมูล user
 
   const [board, setBoard] = useState(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
   const [winner, setWinner] = useState(null);
   const [score, setScore] = useState(0);
   const [winStreak, setWinStreak] = useState(0);
-/*
-      [0, 1, 2], [3, 4, 5], [6, 7, 8],
-      [0, 3, 6], [1, 4, 7], [2, 5, 8],
-      [0, 4, 8], [2, 4, 6],
-*/
+  
   const calculateWinner = (squares) => {
     const lines = [
       [0, 1, 2],
@@ -69,28 +67,47 @@ const TicTacToe = () => {
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [isXNext, winner, board]);
+  }, [isXNext, winner, board,user]);
 
   useEffect(() => {
-    const winner = calculateWinner(board);
-    if (winner) {
-      setWinner(winner);
-      if (winner === 'X') {
-        setScore(score => score + 1);
-        setWinStreak(streak => streak + 1);
-        if (winStreak === 2) {
+    const checkWinnerAndUpdateScore = async () => {
+      const winner = calculateWinner(board);
+      if (winner) {
+        setWinner(winner);
+        if (winner === 'X') {
           setScore(score => score + 1);
+          setWinStreak(streak => streak + 1);
+          if (winStreak === 2) {
+            setScore(score => score + 1);
+            setWinStreak(0);
+          }
+        } else {
+          setScore(score => score - 1);
           setWinStreak(0);
         }
-      } else {
-        setScore(score => score - 1);
-        setWinStreak(0);
+
+        // ก่อนรีเซ็ตเกม เราจะอัปเดตคะแนนไปยัง backend
+        const result = winner === 'X' ? 'win' : 'lose'; // ใช้ผลลัพธ์ของเกมว่า win หรือ lose
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/api/players`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ token, result }),
+          });
+          const data = await response.json();
+          console.log('Score updated:', data);
+        } catch (error) {
+          console.error('Error updating score:', error);
+        }
+      } else if (!board.includes(null)) {
+        setWinner('draw');
       }
-      // ส่งผลลัพธ์เกมไปอัปเดตคะแนน
-      dispatch(updateScore({ token, score }));
-    } else if (!board.includes(null)) {
-      setWinner('draw');
-    }
+    };
+
+    checkWinnerAndUpdateScore();
   }, [board]);
 
   const renderSquare = (i) => (
@@ -103,7 +120,8 @@ const TicTacToe = () => {
     </button>
   );
 
-  const resetGame = () => {
+  const resetGame = async () => {
+    // รีเซ็ตบอร์ดเกม
     setBoard(Array(9).fill(null));
     setIsXNext(true);
     setWinner(null);
@@ -111,7 +129,7 @@ const TicTacToe = () => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
-      <h1 className="text-4xl font-bold mb-8">Tic-Tac-Toe vs Bot</h1>
+      <h1 className="text-4xl font-bold mb-8">{user.name} vs Bot</h1>
       <div className="mb-4 p-4 bg-blue-100 border border-blue-300 rounded">
         <p className="font-semibold">Score: {score} | Win Streak: {winStreak}</p>
       </div>
@@ -127,12 +145,20 @@ const TicTacToe = () => {
           </p>
         </div>
       )}
-      <button
-        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        onClick={resetGame}
-      >
-        New Game
-      </button>
+      <div className="flex space-x-4 mt-4">
+        <button
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          onClick={resetGame}
+        >
+          New Game
+        </button>
+        <button
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          onClick={() => navigate(-1)}
+        >
+          Back
+        </button>
+      </div>
     </div>
   );
 };

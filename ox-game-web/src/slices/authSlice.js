@@ -2,7 +2,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
-  token: null,
+  token: null, // เก็บ token หลังจากผู้ใช้เข้าสู่ระบบ
   user: null,
 };
 
@@ -24,5 +24,4 @@ const authSlice = createSlice({
 });
 
 export const { setToken, setUser, logout } = authSlice.actions;
-
 export default authSlice.reducer;
