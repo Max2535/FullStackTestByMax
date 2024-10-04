@@ -2,7 +2,7 @@ import React from 'react';
 import { useDispatch } from 'react-redux';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { setToken, setUser } from '../slices/authSlice';
-import { useNavigate } from 'react-router-dom';
+import { json, useNavigate } from 'react-router-dom';
 
 const Login = () => {
   const dispatch = useDispatch();
@@ -32,6 +32,7 @@ const Login = () => {
       })
       .catch((error) => {
         console.error('Login failed:', error);
+        alert(json.stringify(error));
       });
   };
 

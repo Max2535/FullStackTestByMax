@@ -3,7 +3,6 @@ import { X, Circle } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 
-
 const TicTacToe = () => {
   const navigate = useNavigate();
 

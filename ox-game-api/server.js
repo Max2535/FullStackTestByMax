@@ -4,7 +4,6 @@ const sqlite3 = require("sqlite3").verbose();
 const bodyParser = require("body-parser");
 const { OAuth2Client } = require("google-auth-library");
 const verifyToken = require("./middleware/authMiddleware"); // นำเข้า middleware
-//const apiRoutes = require('./routes/apiRoutes'); // นำเข้าไฟล์ route
 require("dotenv").config(); // นำเข้า dotenv
 
 const app = express();
@@ -99,7 +98,6 @@ app.post("/api/players", verifyToken, async (req, res) => {
   }
 });
 
-
 // แสดงคะแนนของผู้เล่นทั้งหมด (Leaderboard)
 app.get("/api/leaderboard", verifyToken, (req, res) => {
   const sql =
@@ -111,8 +109,6 @@ db.all(sql, [], (err, rows) => {
   res.json({ players: rows });
 });
 });
-
-
 
 // แสดงคะแนนของผู้เล่นคนเดียว
 app.get("/api/players/", verifyToken, async (req, res) => {
@@ -160,8 +156,10 @@ app.post("/api/auth/google", async (req, res) => {
   }
 });
 
-// ใช้ route ที่ต้องการตรวจสอบการเข้าสู่ระบบ
-//app.use('/api', apiRoutes);
+
+app.get("/", async (req, res) => {
+  res.status(200).json({ message: "Hello World!!!" });
+});
 
 // เริ่มเซิร์ฟเวอร์
 app.listen(port, () => {
