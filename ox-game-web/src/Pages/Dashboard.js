@@ -50,7 +50,7 @@ const Dashboard = () => {
           }
         );
         let data = await response.json();
-        //data = data.filter(x=>x.user !== user.user);
+        data = data.filter(x=>x.user !== user.user);
         setScoreData(data);
       } catch (error) {
         console.error("Error fetching user data:", error);
