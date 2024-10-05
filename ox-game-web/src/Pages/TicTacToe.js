@@ -106,6 +106,7 @@ const TicTacToe = () => {
       }
     };
 
+    if(score<0) setScore(0);
     checkWinnerAndUpdateScore();
   }, [board]);
 
