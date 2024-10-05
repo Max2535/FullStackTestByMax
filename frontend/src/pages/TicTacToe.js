@@ -9,6 +9,7 @@ const TicTacToe = () => {
   const token = useSelector((state) => state.auth.token); // ดึง token จาก Redux store
   const user = useSelector((state) => state.auth.user); // ดึงข้อมูล user
 
+  const [difficulty, setDifficulty] = useState('easy'); // ค่าเริ่มต้น
   const [board, setBoard] = useState(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
   const [winner, setWinner] = useState(null);
@@ -36,13 +37,60 @@ const TicTacToe = () => {
   };
 
   const botMove = (currentBoard) => {
+
+    if(difficulty==='easy'){
+
+      const emptySquares = currentBoard.reduce((acc, val, idx) => {
+        if (val === null) acc.push(idx);
+        return acc;
+      }, []);
+      if (emptySquares.length === 0) return;
+      const randomIndex = Math.floor(Math.random() * emptySquares.length);
+      return emptySquares[randomIndex];
+
+
+    }else{
+
+    // ตรวจสอบถ้ามีการเดินที่บอทสามารถชนะได้
+    for (let i = 0; i < currentBoard.length; i++) {
+      if (currentBoard[i] === null) {
+        const tempBoard = [...currentBoard];
+        tempBoard[i] = 'O';
+        if (calculateWinner(tempBoard) === 'O') {
+          return i; // บอทชนะ
+        }
+      }
+    }
+  
+    // ตรวจสอบถ้ามีการเดินที่ผู้เล่นสามารถชนะได้ และบอทควรป้องกัน
+    for (let i = 0; i < currentBoard.length; i++) {
+      if (currentBoard[i] === null) {
+        const tempBoard = [...currentBoard];
+        tempBoard[i] = 'X';
+        if (calculateWinner(tempBoard) === 'X') {
+          return i; // ป้องกันไม่ให้ผู้เล่นชนะ
+        }
+      }
+    }
+  
+    // ถ้าไม่มีใครจะชนะในตาถัดไป ให้บอทเลือกตำแหน่งกลางก่อน (ตำแหน่ง 4)
+    if (currentBoard[4] === null) {
+      return 4; // ถ้าตำแหน่งกลางว่าง
+    }
+  
+    // ถ้าไม่มีทางเลือกที่ดีกว่า ให้สุ่มการเคลื่อนไหว
     const emptySquares = currentBoard.reduce((acc, val, idx) => {
       if (val === null) acc.push(idx);
       return acc;
     }, []);
-    if (emptySquares.length === 0) return;
+    
     const randomIndex = Math.floor(Math.random() * emptySquares.length);
     return emptySquares[randomIndex];
+    }
+  };
+
+  const handleDifficultyChange = (event) => {
+    setDifficulty(event.target.value);
   };
 
   const handleClick = (i) => {
@@ -75,11 +123,14 @@ const TicTacToe = () => {
         setWinner(winner);
         if (winner === 'X') {
           setScore(score => score + 1);
-          setWinStreak(streak => streak + 1);
-          if (winStreak === 2) {
-            setScore(score => score + 1);
-            setWinStreak(0);
-          }
+          setWinStreak(streak => {
+            const newStreak = streak + 1;
+            if (newStreak === 3) {
+              setScore(score => score + 1); // เพิ่มคะแนนพิเศษเมื่อชนะ 3 ครั้งติดต่อกัน
+              return 0; // รีเซ็ต streak
+            }
+            return newStreak;
+          });
         } else {
           setScore(score => score - 1);
           setWinStreak(0);
@@ -132,6 +183,13 @@ const TicTacToe = () => {
       <div className="mb-4 p-4 bg-blue-100 border border-blue-300 rounded">
         <p className="font-semibold">Score: {score} | Win Streak: {winStreak}</p>
       </div>
+      <div className="mb-4">
+  <label className="mr-4">Choose Difficulty: </label>
+  <select value={difficulty} onChange={handleDifficultyChange} className="p-2 border border-gray-300 rounded">
+    <option value="easy">Easy</option>
+    <option value="hard">Hard</option>
+  </select>
+</div>
       <div className="grid grid-cols-3 gap-2 mb-4">
         {[...Array(9)].map((_, i) => renderSquare(i))}
       </div>

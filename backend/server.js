@@ -45,10 +45,9 @@ function updateScoreAndStreak(result, score, streak) {
       streak = 0; // รีเซ็ต streak
     }
   } else if (result === 'lose') {
-    score -= 1;
+    score = Math.max(0, score - 1); // ป้องกันคะแนนติดลบ
     streak = 0; // รีเซ็ต streak เมื่อแพ้
   }
-  score<0?score=0:score;
   return { score, streak };
 }
 
